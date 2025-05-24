@@ -6,23 +6,22 @@ db = SQLAlchemy()
 def create_app():
     # Ініціалізація Flask-додатку
     app = Flask(__name__)
-
-    # Завантаження конфігурації з об'єкта
-    app.config.from_object("config.Config")
+    app.config.from_object('config.Config')
 
     # Ініціалізація бази даних
     db.init_app(app)
 
-    # Реєстрація blueprint'ів і створення таблиць
+    # Контекст додатку
     with app.app_context():
-        # Імпорти всередині контексту для уникнення циклічних залежностей
+        # Імпорти всередині контексту, щоб уникнути циклічних імпортів
         from app.books.models import Book
-        from app.books import views  # Якщо є view-функції в цьому модулі
-        from app.books import book_bp
+        from app.books import book_bp  # Імпортуємо Blueprint
+        from app import views          # Роутинг з views.py
 
+        # Реєстрація Blueprint для книг
         app.register_blueprint(book_bp)
 
-        # Створення таблиць (якщо вони ще не існують)
+        # Створення таблиць у БД
         db.create_all()
 
     return app
