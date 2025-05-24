@@ -1,66 +1,65 @@
-from flask import Flask, jsonify, request, abort
-from marshmallow import Schema, fields, ValidationError
-import uuid
-from . import book_bp
+from flask import Blueprint, jsonify, request, abort
+from marshmallow import Schema, fields
+from app import db
+from .models import Book
 
-class BookDTO(Schema):
-    uid = fields.Str(dump_only=True)
-    name = fields.Str(required=True)
-    writer = fields.Str(required=True)
-    published = fields.Int(required=True)
+book_bp = Blueprint('book_bp', __name__)
 
-book_dto = BookDTO()
-book_list_dto = BookDTO(many=True)
+# Схема для валідації та серіалізації
+class BookSchema(Schema):
+    id = fields.Str(dump_only=True)
+    title = fields.Str(required=True)
+    author = fields.Str(required=True)
+    year = fields.Int(required=True)
 
-library = [
-    {
-        "uid": 1,
-        "name": "1984",
-        "writer": "George Orwell",
-        "published": 1949
-    },
-    {
-        "uid": 2,
-        "name": "Brave New World",
-        "writer": "Aldous Huxley",
-        "published": 1932
-    },
-    {
-        "uid": 3,
-        "name": "Fahrenheit 451",
-        "writer": "Ray Bradbury",
-        "published": 1953
-    }
-]
+book_schema = BookSchema()
+books_schema = BookSchema(many=True)
 
-@book_bp.route('/all', methods=['GET'])
-def fetch_all_books():
-    return jsonify(library), 200
-
-@book_bp.route('/book/<int:uid>', methods=['GET'])
-def fetch_single_book(uid):
-    selected = next((item for item in library if item["uid"] == uid), None)
-    if not selected:
-        abort(404, description="Книгу не знайдено")
-    return jsonify(selected), 200
-
-@book_bp.route('/create', methods=['POST'])
-def create_book():
+# Отримати список книг з пагінацією
+@book_bp.route('/', methods=['GET'])
+def list_books():
     try:
-        payload = book_dto.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
+        limit = int(request.args.get('limit', 10))
+        offset = int(request.args.get('offset', 0))
+    except ValueError:
+        abort(400, description="Invalid pagination parameters")
 
-    payload["uid"] = str(uuid.uuid4())  # Генеруємо новий UUID
-    library.append(payload)
-    return jsonify(payload), 201
+    books = Book.query.limit(limit).offset(offset).all()
+    return jsonify(books_schema.dump(books)), 200
 
-@book_bp.route('/remove/<string:uid>', methods=['DELETE'])
-def remove_book(uid):
-    global library
-    item = next((b for b in library if b["uid"] == uid), None)
-    if not item:
-        abort(404, description="Книгу не знайдено")
+# Отримати одну книгу за ID
+@book_bp.route('/<int:book_id>', methods=['GET'])
+def retrieve_book(book_id):
+    book = Book.query.get_or_404(book_id, description="Book not found")
+    return jsonify(book_schema.dump(book)), 200
 
-    library = [b for b in library if b["uid"] != uid]
-    return jsonify({"message": "Книгу успішно видалено"}), 200
+# Додати нову книгу
+@book_bp.route('/add', methods=['POST'])
+def create_book():
+    json_data = request.get_json()
+    if not json_data:
+        abort(400, description="No input data provided")
+    
+    try:
+        new_data = book_schema.load(json_data)
+    except Exception as err:
+        abort(400, description=f"Invalid data: {err}")
+
+    new_book = Book(
+        title=new_data['title'],
+        author=new_data['author'],
+        year=new_data['year']
+    )
+
+    db.session.add(new_book)
+    db.session.commit()
+
+    return jsonify(book_schema.dump(new_book)), 201
+
+# Видалити книгу за ID
+@book_bp.route('/delete/<int:book_id>', methods=['DELETE'])
+def remove_book(book_id):
+    book = Book.query.get_or_404(book_id, description="Book not found")
+    db.session.delete(book)
+    db.session.commit()
+    return jsonify({"message": f"Book with ID {book_id} has been deleted."}), 200

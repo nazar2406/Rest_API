@@ -1,17 +1,19 @@
-from flask import Flask, jsonify, request, abort
-from marshmallow import Schema, fields, ValidationError
-from . import app
-import uuid
+from flask import Blueprint, jsonify
 
-@app.route('/home')
-def welcome():
-    return "Вітаю!"
+# Створення Blueprint (можна підключити до app пізніше)
+main_bp = Blueprint('main', __name__)
 
-# 🔧 Обробка помилок
-@app.errorhandler(404)
-def handle_not_found(error):
-    return jsonify(message=str(error)), 404
+# Головна сторінка
+@main_bp.route('/')
+def home():
+    return "Hello"
 
-@app.errorhandler(400)
-def handle_bad_request(error):
-    return jsonify(message=str(error)), 400
+# Обробка помилки 404
+@main_bp.app_errorhandler(404)
+def handle_404(error):
+    return jsonify({"error": str(error)}), 404
+
+# Обробка помилки 400
+@main_bp.app_errorhandler(400)
+def handle_400(error):
+    return jsonify({"error": str(error)}), 400
